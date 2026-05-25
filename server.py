@@ -1951,11 +1951,13 @@ if __name__ == "__main__":
             for route in _sse_routes:
                 path = getattr(route, "path", "").rstrip("/")
                 if path == "/sse":
-                    _sse_alias_routes.append(
-                        Route("/mcp/sse", endpoint=route.endpoint, methods=["GET"])
-                    )
+                    for alias in ("/mcp/sse", "/mcp//sse", "/mcp/mcp/sse"):
+                        _sse_alias_routes.append(
+                            Route(alias, endpoint=route.endpoint, methods=["GET"])
+                        )
                 elif path == "/messages":
-                    _sse_alias_routes.append(Mount("/mcp/messages", app=route.app))
+                    for alias in ("/mcp/messages", "/mcp//messages", "/mcp/mcp/messages"):
+                        _sse_alias_routes.append(Mount(alias, app=route.app))
             _app = Starlette(
                 debug=_streamable_app.debug,
                 routes=[*_streamable_app.routes, *_sse_routes, *_sse_alias_routes],
