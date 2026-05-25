@@ -1938,9 +1938,22 @@ if __name__ == "__main__":
         # --- Add CORS middleware so remote clients (Cloudflare Tunnel / ngrok) can connect ---
         # --- 添加 CORS 中间件，让远程客户端（Cloudflare Tunnel / ngrok）能正常连接 ---
         if transport == "streamable-http":
-            _app = mcp.streamable_http_app()
+            from starlette.applications import Starlette
+
+            _streamable_app = mcp.streamable_http_app()
+            _sse_app = mcp.sse_app()
+            _sse_routes = [
+                route for route in _sse_app.routes
+                if getattr(route, "path", "") in ("/sse", "/messages")
+            ]
+            _app = Starlette(
+                debug=_streamable_app.debug,
+                routes=[*_streamable_app.routes, *_sse_routes],
+                lifespan=_streamable_app.router.lifespan_context,
+            )
         else:
             _app = mcp.sse_app()
+
         _app.add_middleware(
             CORSMiddleware,
             allow_origins=["*"],
