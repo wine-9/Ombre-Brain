@@ -1944,7 +1944,7 @@ if __name__ == "__main__":
             _sse_app = mcp.sse_app()
             _sse_routes = [
                 route for route in _sse_app.routes
-                if getattr(route, "path", "") in ("/sse", "/messages")
+                if getattr(route, "path", "").rstrip("/") in ("/sse", "/messages")
             ]
             _app = Starlette(
                 debug=_streamable_app.debug,
