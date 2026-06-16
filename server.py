@@ -122,6 +122,14 @@ mcp = FastMCP(
 # Sessions stored in memory (lost on restart, 7-day expiry).
 # =============================================================
 _sessions: dict[str, float] = {}  # {token: expiry_timestamp}
+MCP_AUTH_TOKEN = os.environ.get("MCP_AUTH_TOKEN", "").strip()
+
+
+def _bearer_token(request) -> str:
+    auth = request.headers.get("authorization", "")
+    if auth.lower().startswith("bearer "):
+        return auth.split(" ", 1)[1].strip()
+    return ""
 
 
 def _get_auth_file() -> str:
@@ -201,6 +209,14 @@ def _require_auth(request):
             status_code=401,
         )
     return None
+
+
+def _mcp_auth_ok(request) -> bool:
+    if not MCP_AUTH_TOKEN:
+        logger.warning("MCP_AUTH_TOKEN is not set; refusing /mcp request for safety.")
+        return False
+    token = _bearer_token(request)
+    return bool(token and hmac.compare_digest(token, MCP_AUTH_TOKEN))
 
 
 # --- Auth endpoints ---
@@ -1914,6 +1930,18 @@ if __name__ == "__main__":
         import threading
         import uvicorn
         from starlette.middleware.cors import CORSMiddleware
+        from starlette.middleware.base import BaseHTTPMiddleware
+        from starlette.responses import JSONResponse
+
+        class MCPAuthMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                if request.url.path.startswith("/mcp") and not _mcp_auth_ok(request):
+                    return JSONResponse(
+                        {"error": "Unauthorized MCP request"},
+                        status_code=401,
+                        headers={"WWW-Authenticate": "Bearer"},
+                    )
+                return await call_next(request)
 
         # --- Application-level keepalive: ping /health every 60s ---
         # --- 应用层保活：每 60 秒 ping 一次 /health，防止 Cloudflare Tunnel 空闲断连 ---
@@ -1972,7 +2000,9 @@ if __name__ == "__main__":
             allow_headers=["*"],
             expose_headers=["*"],
         )
+        _app.add_middleware(MCPAuthMiddleware)
         logger.info("CORS middleware enabled for remote transport / 已启用 CORS 中间件")
         uvicorn.run(_app, host="0.0.0.0", port=OMBRE_PORT)
     else:
         mcp.run(transport=transport)
+1
